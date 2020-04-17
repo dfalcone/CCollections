@@ -1,0 +1,246 @@
+//// Copyright 2020, Dante Falcone. MIT License.
+//#pragma once
+//#ifndef CLIST_H
+//#define CLIST_H
+//
+//#include "CContainer.h"
+//#include <stdbool.h>
+//#include <memory.h>
+//#include <immintrin.h>
+//#include <assert.h>
+//
+//#ifdef __cplusplus
+//extern "C" {
+//#endif // __cplusplus
+//
+//
+//inline void clistAlloc(CList* list, size_t stride, uint32_t capacity)
+//{
+//    ccontainerAlloc(list, stride, capacity);
+//}
+//
+//void clistFree(CContainer* ctr)
+//{
+//    _mm_free(ctr->Data);
+//    memset(ctr, 0, sizeof(CContainer));
+//}
+//
+//void ctrRealloc(CContainer* ctr, size_t stride, uint32_t capacity)
+//{
+//    if (!CCOLLECTIONS_IS_POW2(capacity))
+//    {
+//        CCOLLECTIONS_SET_NEXT_POW2(capacity);
+//    }
+//    size_t size = stride * capacity;
+//    void* data = ctr->Data;
+//    ctr->Data = _mm_malloc(size, CCOLLECTIONS_ALIGNMENT);
+//    memcpy(ctr->Data, data, size);
+//    _mm_free(data);
+//    ctr->Capacity = capacity;
+//}
+//
+//void ctrClear(CContainer* ctr)
+//{
+//    ctr->Count = 0;
+//}
+//
+//void ctrGrow(CContainer* ctr, size_t stride, uint32_t capacity)
+//{
+//    if (capacity > ctr->Capacity)
+//    {
+//        ctrrealloc(ctr, capacity, stride);
+//    }
+//}
+//
+//void ctrShrink(CContainer* ctr, size_t stride, uint32_t capacity)
+//{
+//    if (capacity < ctr->Capacity)
+//    {
+//        ctrrealloc(ctr, capacity, stride);
+//    }
+//}
+//
+//uint32_t ctrFindIndex(CContainer* ctr, size_t stride, void* item)
+//{
+//    uint8_t* itr = (uint8_t)ctr->Data;
+//    uint8_t* end = itr + stride * ctr->Capacity;
+//    for (uint32_t i = 0; itr != end; ++i, itr += stride)
+//    {
+//        if (memcmp(itr, item, stride) == 0)
+//        {
+//            return i;
+//        }
+//    }
+//    return 0xFFFFffff;
+//}
+//
+//void ctrAdd(CContainer* ctr, size_t stride, void* item)
+//{
+//    ctrGrow(ctr, stride, ctr->Capacity + 1);
+//    uint8_t* dst = (uint8_t*)ctr->Data + stride * ctr->Count;
+//    memcpy(dst, item, stride);
+//    ++ctr->Count;
+//}
+//
+//void ctrAddAt(CContainer* ctr, size_t stride, void* item, uint32_t index)
+//{
+//    assert(index <= ctr->Count);
+//    ctrGrow(ctr, stride, ctr->Capacity + 1);
+//    uint8_t* bgn = (uint8_t)ctr->Data;
+//    uint8_t* end = bgn + stride * ctr->Capacity;
+//    uint8_t* src = bgn + stride * index;
+//    uint8_t* dst = src + stride;
+//    memmove(dst, src, end - src);
+//    memcpy(item, src, stride);
+//    ++ctr->Count;
+//}
+//
+//void ctrRemoveAt(CContainer* ctr, size_t stride, uint32_t index)
+//{
+//    assert(index < ctr->Count);
+//    uint8_t* bgn = (uint8_t)ctr->Data;
+//    uint8_t* end = bgn + stride * ctr->Capacity;
+//    uint8_t* dst = bgn + stride * index;
+//    uint8_t* src = dst + stride;
+//    memmove(dst, src, end - src);
+//    --ctr->Count;
+//}
+//
+//void ctrRemove(CContainer* ctr, size_t stride, void* item)
+//{
+//    uint32_t i = ctrFindIndex(ctr, stride, item);
+//    ctrRemoveAt(ctr, stride, i);
+//}
+//
+//void ctrRemoveSwapAt(CContainer* ctr, size_t stride, uint32_t index)
+//{
+//    assert(index < ctr->Count);
+//    uint8_t* bgn = (uint8_t)ctr->Data;
+//    uint8_t* end = bgn + stride * ctr->Capacity;
+//    uint8_t* dst = bgn + stride * index;
+//    uint8_t* src = end - stride;
+//    memmove(dst, src, stride);
+//    --ctr->Count;
+//}
+//
+//void ctrRemoveSwap(CContainer* ctr, size_t stride, void* item)
+//{
+//    uint32_t i = ctrFindIndex(ctr, stride, item);
+//    ctrRemoveSwapAt(ctr, stride, i);
+//}
+//
+//
+//inline uint8_t* clistBegin(CList* lst)
+//{
+//    return ccontainerBegin(lst);
+//}
+//
+//inline uint8_t* clistEnd(CList* lst, size_t stride)
+//{
+//    return ccontainerEnd(lst, stride);
+//}
+//
+//
+//
+////#ifndef CLIST_ALIGNMENT
+////// default to common cache line size
+////#define CLIST_ALIGNMENT 64
+////#endif // !CLIST_ALIGNMENT
+////
+////#ifndef IS_POW2
+////#define IS_POW2(x) ( (x & (x - 1)) == 0 )
+////#endif // !CX_IS_POW2
+////
+////#ifndef SET_NEXT_POW2
+////#define SET_NEXT_POW2(x) { --x; x|=x>>1; x|=x>>2; x|=x>>4; x|=x>>8; x|=x>>16; ++x; }
+////#endif // !SET_NEXT_POW2
+////
+////
+////
+////#define CLIST_DECLARE(T)        \
+////    typedef struct CList_##T##_t\
+////    {                           \
+////        T* Data;                \
+////        uint32_t Count;         \
+////        uint32_t Capacity;      \
+////    } CList_##T             
+////
+////#define CLIST_FORWARD_DECLARE(T) typedef struct CList_##T##_t CList_ ##T
+////#define CList(T) CList_##T
+////
+////#define clistGetCount(pList)    (pList)->Count
+////#define clistGetCapacity(pList) (pList)->Capacity 
+////#define clistGetData(pList)     (pList)->Data
+////
+////#define clistSetCapacity(pList, capacity) {     \
+////    uint32_t newCap = capacity;                 \
+////    uint32_t count  = (pList)->Count;           \
+////    uint32_t oldCap = (pList)->Capacity;        \
+////    void* oldData   = (pList)->Data;            \
+////                                                \
+////    if (newCap > oldCap) {                      \
+////        if (!IS_POW2(newCap))                   \
+////            SET_NEXT_POW2(newCap);              \
+////                                                \
+////        uint32_t itemSize = sizeof(*(pList));   \
+////        uint32_t dataSize = count * itemSize;   \
+////        uint32_t capSize = newCap * itemSize;   \
+////                                                \
+////        void* newData = _mm_malloc(capSize, CLIST_ALIGNMENT);\
+////        assert(newData != NULL);                \
+////                                                \
+////        if (oldData) {                          \
+////            memcpy(newData, oldData, dataSize); \
+////            _mm_free(oldData);                  \
+////        }                                       \
+////                                                \
+////        (pList)->Capacity = newCap;             \
+////        (pList)->Data = newData;                \
+////    }                                           \
+////}
+////
+////#define clistSetCount(pList, count) { clistSetCapacity(pList, count); (pList)->Count = count; }
+////
+////
+////#define clistNew(pList, capacity) { memset((pList), 0, sizeof(*(pList))); clistSetCapacity(pList, capacity); }
+////#define clistDelete(pList) if((pList)->Data) _mm_free((pList)->Data)
+////#define clistClear(pList) (pList)->Count = 0
+////
+////#define clistAdd(pList, item) {             \
+////    uint32_t count = clistGetCount(pList);  \
+////    clistSetCapacity(pList, count);         \
+////    memcpy(clistGetData(pList) + count, item, sizeof(*(pList))); ++clistGetData(pList); \
+////}
+////
+////#define clistRemoveAt(pList, index) {               \
+////    uint32_t count = (pList)->Count;                \
+////    assert(index < (pList)->Count);                 \
+////    uint32_t moveCount = count - index;             \
+////    size_t moveSize = moveCount * sizeof(*(pList)); \
+////    void* removeData = (pList)->Data + index;       \
+////    void* removeDataEnd = (pList)->Data + index + 1;\
+////    memmove(removeData, removeDataEnd, moveSize);   \
+////    --(pList)->Count;                               \
+////}
+////
+////#define clistRemove(pList, pItem) {                     \
+////    auto data = (pList)->Data;                          \
+////    auto dataEnd = (pList)->Data + (pList)->Count;      \
+////                                                        \
+////    uint32_t i = 0;                                     \
+////    while (data != dataEnd) {                           \
+////        if (memcmp(pList, pItem, sizeof(*(pList))) == 0)\
+////            break;                                      \
+////        ++data;                                         \
+////        ++i;                                            \
+////    }                                                   \
+////                                                        \
+////    clistRemoveAt(pList, i);                            \
+////}
+//
+//
+//#ifdef __cplusplus
+//}
+//#endif // __cplusplus
+//
+//#endif // !CLIST_H

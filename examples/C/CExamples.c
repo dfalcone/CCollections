@@ -1,47 +1,24 @@
+
 #include "CCollections/CList.h"
 
-CLIST_FORWARD_DECLARE(int);
-CLIST_DECLARE(int);
 
-void clistRemove(CList_int* pList, int* pItem) {
-    auto data = (pList)->Data;
-    auto dataEnd = (pList)->Data + (pList)->Count;
-
-    uint32_t i = 0;
-    while (data != dataEnd)
-    {
-        if (memcmp(pList, pItem, sizeof(*(pList))) == 0)
-            break;
-        ++data;
-        ++i;
-    }
-
-    clistRemoveAt(pList, i);
-}
-
-void ttest()
+int main(void)
 {
+    assert(sizeof(CList) == 32);
 
-    CList_int listOfInt;
+    CList a = {0};
+    CList* p = &a;
+    clistAlloc(p, sizeof(int), 32);
+    clistRealloc(p, 64);
 
-    CList(int) listInt;
-    CList(int)* pList = &listInt;
-    uint32_t capacity = 32;
-
-    clistSetCapacity(pList, 32);
-    clistNew(&listInt, 32);
-    clistDelete(&listInt);
-
-    listInt = (const struct CList_int_t){ 0 };
-
-    //*pList = { 0 };
-
-}
-
-
-
-int main()
-{
+    int two = 2;
+    uint32_t i = 0xFFFFFFFF;
+    clistAdd(p, &two);
+    i = clistFindIndex(p, &two);
+    assert(i == 0);
+    assert(two == 2);
+    assert(*(int*)clistItemAt(p, 0) == two);
+    clistFree(p);
 
     return 0;
 }
