@@ -58,6 +58,13 @@ inline void* clistEnd(CList* list)
     return ptr + size;
 }
 
+inline void* clistCapacityEnd(CList* list)
+{
+    uint8_t* ptr = list->Items;
+    uint32_t size = clistSizeOfCapacity(list);
+    return ptr + size;
+}
+
 inline void clistAlloc(CList* list, uint32_t stride, uint32_t capacity)
 {
     if (!CCOLLECTIONS_IS_POW2(capacity))
@@ -77,18 +84,23 @@ inline void clistFree(CList* list)
     _mm_free(list->Items);
 }
 
+inline void clistZeroMem(CList* list)
+{
+    uint32_t size = clistSizeOfCapacity(list);
+    memset(list->Items, 0, size);
+}
+
 inline void clistRealloc(CList* list, uint32_t newCapacity)
 {
     if (!CCOLLECTIONS_IS_POW2(newCapacity))
     {
         CCOLLECTIONS_SET_NEXT_POW2(newCapacity);
     }
-    uint32_t size = clistSizeOfCapacity(list);
     void* data = list->Items;
-    list->Items = _mm_malloc(size, CCOLLECTIONS_ALIGNMENT);
-    memcpy(list->Items, data, size);
-    _mm_free(data);
     list->Capacity = newCapacity;
+    list->Items = _mm_malloc(clistSizeOfCapacity(list), CCOLLECTIONS_ALIGNMENT);
+    memcpy(list->Items, data, clistSizeOfItems(list));
+    _mm_free(data);
 }
 
 inline void clistGrow(CList* list, uint32_t newcapacity)
@@ -96,6 +108,18 @@ inline void clistGrow(CList* list, uint32_t newcapacity)
     if (newcapacity > list->Capacity)
     {
         clistRealloc(list, newcapacity);
+    }
+}
+
+inline void clistGrowZero(CList* list, uint32_t newcapacity)
+{
+    if (newcapacity > list->Capacity)
+    {
+        clistRealloc(list, newcapacity);
+        uint8_t* dst = (uint8_t*)list->Items + clistSizeOfItems(list);
+        uint8_t* capEnd = (uint8_t*)list->Items + clistSizeOfCapacity(list);
+        size_t size = capEnd - dst;
+        memset(dst, 0, size);
     }
 }
 
@@ -122,6 +146,28 @@ inline void* clistItemAt(CList* list, uint32_t index)
     return ptr + offset;
 }
 
+inline void clistZeroItemAt(CList* list, uint32_t index)
+{
+    void* item = clistItemAt(list, index);
+    memset(item, 0, list->Stride);
+}
+
+inline void clistRemoveAt(CList* list, uint32_t index)
+{
+    uint8_t* dst = clistItemAt(list, index);
+    uint8_t* src = dst + list->Stride;
+    uint8_t* end = clistEnd(list);
+    memmove(dst, src, end - src);
+    --list->Count;
+}
+
+inline void clistRemove(CList* list, void* item)
+{
+    uint32_t index = clistFindInde(list, item);
+    if (index == CCOLLECTION_ERROR) return;
+    clistRemoveAt(list, index);
+}
+
 inline uint32_t clistFindIndex(CList* list, void* item)
 {
     uint8_t* itr = clistBegin(list);
@@ -130,6 +176,26 @@ inline uint32_t clistFindIndex(CList* list, void* item)
     for (uint32_t i = 0; itr != end; itr += stride, ++i)
     {
         if (memcmp(itr, item, stride) == 0)
+        {
+            return i;
+        }
+    }
+    return CCOLLECTION_ERROR;
+}
+
+inline uint32_t clistFindZeroIndex(CList* list)
+{
+    uint8_t* itr = clistBegin(list);
+    uint8_t* end = clistCapacityEnd(list);
+    uint32_t stride = list->Stride;
+    for (uint32_t i = 0; itr != end; itr += stride, ++i)
+    {
+        size_t bytesSum = 0;
+        for (uint8_t* byte = itr, *byteEnd = itr + stride; byte != byteEnd; ++byte)
+        {
+            bytesSum += *byte;
+        }
+        if (bytesSum == 0)
         {
             return i;
         }
