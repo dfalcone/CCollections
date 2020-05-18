@@ -12,7 +12,7 @@ enum CCOLLECTION_ENUMS
     CCOLLECTION_TYPE_LIST   = 0x01,
     //CCOLLECTION_TYPE_SET    = 0x02,
 
-    CCOLLECTION_ERROR = 0xFFFF,
+    CCOLLECTION_ERROR = 0xFFFFFFFF,
 };
 
 //typedef struct CContainer
@@ -30,7 +30,6 @@ typedef struct CContainer
     
     uint32_t Stride;
     uint32_t Type;
-    uint32_t _pad[2];
 } CContainer;
 
 typedef struct CContainer CList;
