@@ -4,8 +4,6 @@
 #include <stdarg.h>
 #include <assert.h>
 
-#define ECS_MAX_SIGNITURE_PERMUTATIONS ((ECS_MAX_COMPONENT_TYPES*ECS_MAX_COMPONENT_TYPES+ECS_MAX_COMPONENT_TYPES)/2)
-
 #define ECS_DEFAULT_ARCHETYPE_COUNT 512
 #define ECS_DEFAULT_QUERY_COUNT 256
 #define ECS_DEFAULT_ENTITY_COUNT 0x10000
@@ -13,15 +11,15 @@
 #define ECS_ALIGNMENT 64
 
 // aligned_alloc
-#if __STDC_VERSION__ >= 201112L // C11 (some compilers may not define this)
+#if defined(_MSC_VER)           // MSVC
+    #undef aligned_alloc
+    #undef aligned_free
+    #define aligned_alloc(size,align) _aligned_malloc(size,align)
+    #define aligned_free _aligned_free
+#elif __STDC_VERSION__ >= 201112L || __cplusplus >= 201103L    // C11, C++11
     #include <stdlib.h>
     #undef aligned_free
     #define aligned_free free
-#elif defined(_MSC_VER)         // MSVC
-    #undef aligned_alloc
-    #undef aligned_free
-    #define aligned_alloc _aligned_malloc
-    #define aligned_free _aligned_free
 #elif defined(__SSE__)          // Intel Arch. SSE Intrinsics
     #include <xmmintrin.h>
     #undef aligned_alloc
@@ -36,7 +34,7 @@
 #endif
 // !aligned_alloc
 
-static inline aligned_realloc(void* ptr, size_t size, size_t align)
+static inline void aligned_realloc(void* ptr, size_t size, size_t align)
 {
     void* oldPtr = ptr;
     ptr = aligned_alloc(size, align);
@@ -98,7 +96,7 @@ void cecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComp
     EcsArchetypeSignature* sigEnd = ArchetypeContainer.signatures + ArchetypeContainer.archetypeCount;
     for (; sigItr != sigEnd; ++sigItr)
     {
-        if (memcmp(sigItr, &signature, sizeof(signature)) == 0)
+        if (memcmp(sigItr, &signature, sizeof(EcsArchetypeSignature)) == 0)
             break;
     }
 
@@ -225,13 +223,13 @@ void ecsCreateArchetypeSignitureAlt(EcsArchetypeSignature* dst, uint componentCo
     va_start(valist, componentCount);
 
     dst->componentIds[0] = va_arg(valist, uint);
-    size_t ignoreSize = va_arg(valist, size_t);
+    va_arg(valist, size_t); // skip size param
 
     for (uint i = 1; i < componentCount; ++i)
     {
         uint componentId_a = dst->componentIds[i - 1];
         uint componentId_b = va_arg(valist, uint);
-        size_t ignoreSize_ = va_arg(valist, size_t);
+        va_arg(valist, size_t); // skip size param
 
         if (componentId_a < componentId_b)
         {
@@ -273,8 +271,8 @@ uint ecsCreateArchetype(uint componentCount, ...)
         {
             EcsArchetype* arch = ArchetypeContainer.archetypes + ArchetypeContainer.archetypeCount + newCount;
             va_list valist;
-            va_start(valist, componentCount * 2);
-            for (uint i = 0; i != componentCount * 2; ++i)
+            va_start(valist, componentCount);
+            for (uint i = 0; i != componentCount; ++i)
             {
                 uint componentId = va_arg(valist, uint);
                 size_t componentSize = va_arg(valist, size_t);
@@ -332,20 +330,11 @@ uint ecsCreateQuery(uint componentCount, ...)
     EcsArchetypeSignature* sigItr = sigBgn;
     EcsArchetypeSignature* sigEnd = sigBgn + ArchetypeContainer.archetypeCount;
     uint* archIdItr = query->archetypeIds;
+
+    uint bQueryValid = 0;
     for (; sigItr != sigEnd; ++sigItr, ++archIdItr)
     {
-        //uint notEqual = 0;
-        //for (uint si = 0; si != (ECS_MAX_COMPONENT_TYPES / (sizeof(size_t) * 8)); ++si)
-        //{
-        //    size_t m1 = *(size_t*)&query->mask + si;
-        //    size_t m2 = *(size_t*)&sigItr->componentMask + si;
-        //    notEqual += (m1 & m2) ^ m1;
-        //}
-        //
-        //if (notEqual)
-        //    continue;
-
-        uint bContainsQuery = 0;
+        uint bContainsQuery = 1;
         for (uint* qIdItr = query->mask.componentIds; *qIdItr != 0xFFFFFFFF; ++qIdItr)
         {
             uint bContainsId = 0;
@@ -366,8 +355,9 @@ uint ecsCreateQuery(uint componentCount, ...)
 
         uint archId = (uint)(sigItr - sigBgn);
         *archIdItr = archId;
+        bQueryValid = 1;
     }
-    assert(query.archetypeIdCount != 0 && "Invalid query paramaters - no archetypes found");
+    assert(bQueryValid && "Invalid query paramaters - no archetypes found");
 
     return queryId;
 }

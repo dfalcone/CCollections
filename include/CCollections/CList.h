@@ -161,7 +161,7 @@ void clistAddRange(CList* list, void* items, uint32_t itemsCount)
     uint8_t* end = (uint8_t*)clistEnd(list);
     memcpy(end, items, (size_t)list->Stride * itemsCount);
     list->Count += itemsCount;
-    assert(list->Count = < list->Capacity && "CList out of bounds");
+    assert(list->Count <= list->Capacity && "CList out of bounds");
 }
 
 void* clistItemAt(CList* list, uint32_t index)
@@ -181,7 +181,7 @@ void clistInsertAt(CList* list, void* item, uint32_t index)
     memmove(movdst, insdst, end - movdst);
     memcpy(insdst, item, stride);
     ++list->Count;
-    assert(list->Count = < list->Capacity && "CList out of bounds");
+    assert(list->Count <= list->Capacity && "CList out of bounds");
 }
 
 void clistInsertRangeAt(CList* list, void* items, uint32_t itemsCount, uint32_t index)
@@ -194,7 +194,7 @@ void clistInsertRangeAt(CList* list, void* items, uint32_t itemsCount, uint32_t 
     memmove(movdst, insdst, end - movdst);
     memcpy(insdst, items, itemsSize);
     list->Count += itemsCount;
-    assert(list->Count = < list->Capacity && "CList out of bounds");
+    assert(list->Count <= list->Capacity && "CList out of bounds");
 }
 
 void clistZeroItemAt(CList* list, uint32_t index)
