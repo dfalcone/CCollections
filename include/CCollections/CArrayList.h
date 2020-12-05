@@ -4,6 +4,12 @@
 #include "CList.h"
 #include <assert.h>
 
+/*  CArrayList
+
+    A linked list of fixed size arrays backed by dynamic heap allocation in n-array size growth
+    Choose a list capacity (n-arrays) that is the expected average number of arrays to avoid additional allocation
+*/
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -137,7 +143,7 @@ inline void carraylistAlloc(CArrayList* list, uint32_t arrayItemStride, uint32_t
     clistAlloc(list, listStride, listCapacity);
 
     // init headers
-    CArrayHeader  ref = { 0u, arrayItemCapacity, arrayItemStride, 0u };
+    CArrayHeader  ref; ref.Count = 0u; ref.Capacity = arrayItemCapacity; ref.Stride = arrayItemStride; ref.UserData = 0u;
     CArrayHeader* itr = (CArrayHeader*)clistBegin(list);
     CArrayHeader* end = (CArrayHeader*)clistCapacityEnd(list);
     while (itr != end)
@@ -271,7 +277,7 @@ inline void carraylistInsertItemAt(CArrayList* list, uint32_t arrayIndex, void* 
     memmove(movdst, insdst, end - movdst);
     memcpy(insdst, item, stride);
     ++header->Count;
-    assert(header->Count =< header->Capacity && "CArray out of bounds");
+    assert(header->Count <= header->Capacity && "CArray out of bounds");
 }
 
 inline void carraylistInsertItemRangeAt(CArrayList* list, uint32_t arrayIndex, void* items, uint32_t itemsCount, uint32_t insertItemsIndex)
@@ -288,7 +294,7 @@ inline void carraylistInsertItemRangeAt(CArrayList* list, uint32_t arrayIndex, v
     memmove(movdst, insdst, end - movdst);
     memcpy(insdst, items, itemsSize);
     header->Count += itemsCount;
-    assert(header->Count =< header->Capacity && "CArray out of bounds");
+    assert(header->Count <= header->Capacity && "CArray out of bounds");
 }
 
 inline void carraylistZeroItemAt(CArrayList* list, uint32_t arrayIndex, uint32_t itemIndex)

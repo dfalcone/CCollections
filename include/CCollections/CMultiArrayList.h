@@ -180,7 +180,8 @@ void cmultiarraylistAddRangeAtKey(CMultiArrayList* c, CMultiArrayListKey* key, v
 
     // copy
     uint8_t* data = (uint8_t*)carraylistData(header);
-    uint8_t* dst = data + header->Stride * header->Count;
+    uint32_t dataSize = header->Stride * header->Count;
+    uint8_t* dst = data + dataSize;
     uint32_t cpysize = header->Stride * itemsCount;
     memcpy(dst, items, cpysize);
     header->Count += itemsCount;
