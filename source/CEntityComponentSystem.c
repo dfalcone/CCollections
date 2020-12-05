@@ -34,7 +34,7 @@
 #endif
 // !aligned_alloc
 
-static inline void aligned_realloc(void* ptr, size_t size, size_t align)
+inline void aligned_realloc(void* ptr, size_t size, size_t align)
 {
     void* oldPtr = ptr;
     ptr = aligned_alloc(size, align);
@@ -64,20 +64,21 @@ struct
     uint queryCapacity;
 } static QueryContainer = { 0 };
 
-void cecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComponent)
+// policy: look for existing matching signiture archetype or create new archetype and move all component data
+// adding components is expensive
+void ecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComponent)
 {
     // get archetype signiture of entity
-    EcsEntity entity = EntityContainer.entities[entityId];
-    EcsArchetypeSignature* signature = &ArchetypeContainer.signatures[entity.archetypeId];
+    EcsEntity* entity = &EntityContainer.entities[entityId];
+    EcsArchetypeSignature signature = ArchetypeContainer.signatures[entity->archetypeId];
 
-    // OR componentId with current signiture
-    //signature.componentMask[componentId / 8] |= componentId % 8;
-
-    // insert componentId into signiture in sorted order
+    // insert componentId into signiture in sorted order - this needs to be a copy!
     {
         uint insId = componentId;
-        uint* sigIdItr = signature->componentIds;
-        while (*sigIdItr != 0xFFFFFFFF)
+        uint* sigIdItr = signature.componentIds;
+        uint* sigIdEnd = sigIdItr + ECS_MAX_QUERY_COMPONENTS;
+        assert(*(sigIdEnd - 1) == 0xFFFFFFFF && "exceeded max components!");
+        while (*sigIdItr != 0xFFFFFFFF && sigIdItr != sigIdEnd)
         {
             if (insId < *sigIdItr)
             {
@@ -90,7 +91,7 @@ void cecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComp
         *sigIdItr = insId;
     }
 
-    // check if signiture already exists - (should be hash table TODO)
+    // check if signiture already exists - (should be hash table? TODO)
     EcsArchetypeSignature* sigBgn = ArchetypeContainer.signatures;
     EcsArchetypeSignature* sigItr = sigBgn;
     EcsArchetypeSignature* sigEnd = ArchetypeContainer.signatures + ArchetypeContainer.archetypeCount;
@@ -106,18 +107,18 @@ void cecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComp
     if (sigItr == sigEnd)
     {
         // get current archetype for strides
-        EcsArchetype* arch = ArchetypeContainer.archetypes + entity.archetypeId;
+        EcsArchetype* arch = ArchetypeContainer.archetypes + entity->archetypeId;
 
         // build componentId and sizeofComponent arg list
         char valist[sizeof(EcsArchetypeSignature) + sizeof(size_t)* ECS_MAX_QUERY_COMPONENTS];
         char* valistItr = valist;
-        uint* sigIdItr = signature->componentIds;
+        uint* sigIdItr = signature.componentIds;
         uint componentCount = 0;
         while (*sigIdItr != 0xFFFFFFFF)
         {
             *(uint*)valistItr = *sigIdItr;
             valistItr += sizeof(uint);
-            *(size_t*)valistItr = arch->componentArrays[*sigIdItr].stride;
+            *(size_t*)valistItr = *sigIdItr == componentId ? sizeofComponent : arch->componentArrays[*sigIdItr].stride;
             valistItr += sizeof(size_t);
 
             ++sigIdItr;
@@ -128,40 +129,104 @@ void cecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComp
         archId = ecsCreateArchetype(componentCount, valist);
     }
 
-    // move entity data to new archetype
+    // move entity data to new archetype TODO
+    EcsArchetype* newarchetype = ecsGetArchetype(archId);
+    EcsArchetype* oldarchetype = ecsGetArchetype(entity->archetypeId);
 
-    // how to find what index each active bit is
+    uint newComponentsId = newarchetype->entityCount;
+    uint oldcomponentsId = entity->componentsId;
+
+    EcsComponentsResultEx componentsDataOld = { 0 };
+    ecsGetComponentsFromEntityIdEx(&componentsDataOld, entityId);
+    
+    entity->archetypeId = archId;
+    entity->componentsId = newComponentsId;
+    
+    EcsComponentsResult componentsDataNew;
+    ecsGetComponentsFromEntityId(&componentsDataNew, entityId);
+
+    // copy component data to new archetype
+    for (int i = 0; i != ECS_MAX_QUERY_COMPONENTS; ++i)
+    {
+        if (componentsDataNew.components[i] == NULL) 
+            break;
+
+        memcpy(componentsDataNew.components[i], componentsDataOld.components[i], componentsDataOld.strides[i]);
+    }
+
+    // add entity to new archetype
+    if (newarchetype->entityCount == newarchetype->entityCapacity)
+    {
+        uint newCapacity = newarchetype->entityCapacity << 1;
+        for (uint* sigIdItr = signature.componentIds; *sigIdItr != 0xFFFFFFFF; ++sigIdItr)
+        {
+            EcsComponentArray* compArray = &newarchetype->componentArrays[*sigIdItr];
+            aligned_realloc(compArray->components, compArray->stride * newCapacity, ECS_ALIGNMENT);
+        }
+        aligned_realloc(newarchetype->entityIds, sizeof(uint) * newCapacity, ECS_ALIGNMENT);
+        newarchetype->entityCapacity = newCapacity;
+    }
+
+    // remove entity from old archetype
+    {
+        // iterative binary search O(log n)
+        uint i = 0;
+        uint last = oldarchetype->entityCount-1;
+        uint mid = 0;
+        while (i <= last)
+        {
+            mid = (i + last) / 2;
+            uint curId = oldarchetype->entityIds[i];
+            if (curId < mid)
+                last = mid - 1;
+            else if (curId > mid)
+                i = mid + 1;
+            else
+                break;
+        }
+
+        // move it
+        void* mvdst = &oldarchetype->entityIds[i];
+        void* mvsrc = &oldarchetype->entityIds[i+1];
+        size_t mvsize = (oldarchetype->entityIds + oldarchetype->entityCount) - ((uint*)mvsrc);
+        memmove(mvdst, mvsize, mvsize);
+
+        --oldarchetype->entityCount;
+    }
+
+    newarchetype->entityIds[newarchetype->entityCount] = entityId;
+    ++newarchetype->entityCount;
 }
 
-EcsEntity* ecsGetEntity(uint entityId)
+inline EcsEntity* ecsGetEntity(uint entityId)
 {
     return &EntityContainer.entities[entityId];
 }
 
-EcsArchetype* ecsGetArchetype(uint archetypeId)
+inline EcsArchetype* ecsGetArchetype(uint archetypeId)
 {
     return &ArchetypeContainer.archetypes[archetypeId];
 }
 
-EcsArchetype* ecsGetArchetypeFromEntity(const EcsEntity* entity)
+inline EcsArchetype* ecsGetArchetypeFromEntity(const EcsEntity* entity)
 {
     return &ArchetypeContainer.archetypes[entity->archetypeId];
 }
 
-EcsArchetype* ecsGetArchetypeFromEntityId(uint entityId)
+inline EcsArchetype* ecsGetArchetypeFromEntityId(uint entityId)
 {
     const EcsEntity* entity = &EntityContainer.entities[entityId];
     return &ArchetypeContainer.archetypes[entity->archetypeId];
 }
 
-void* ecsGetComponentFromArchetype(const EcsArchetype* archetype, uint componentTypeId, uint componentIndex)
+inline void* ecsGetComponentFromArchetype(const EcsArchetype* archetype, uint componentTypeId, uint componentIndex)
 {
     const EcsComponentArray* componentArray = &archetype->componentArrays[componentTypeId];
     byte* component = &componentArray->components[componentIndex * componentArray->stride];
     return (void*)component;
 }
 
-void* ecsGetComponentFromArchetypeId(uint archetypeId, uint componentTypeId, uint componentIndex)
+inline void* ecsGetComponentFromArchetypeId(uint archetypeId, uint componentTypeId, uint componentIndex)
 {
     EcsArchetype* archetype = &ArchetypeContainer.archetypes[archetypeId];
     EcsComponentArray* componentArray = &archetype->componentArrays[componentTypeId];
@@ -169,17 +234,65 @@ void* ecsGetComponentFromArchetypeId(uint archetypeId, uint componentTypeId, uin
     return (void*)component;
 }
 
-void* ecsGetComponentFromEntityId(uint entityId, uint componentTypeId)
+inline void* ecsGetComponentFromEntityId(uint entityId, uint componentTypeId)
 {
     const EcsEntity* entity = &EntityContainer.entities[entityId];
     return ecsGetComponentFromArchetypeId(entity->archetypeId, componentTypeId, entity->componentsId);
 }
 
-EcsQuery* ecsGetQuery(uint queryId)
+void ecsGetComponentsFromEntityId(EcsComponentsResult* dst, uint entityId)
+{
+    const EcsEntity* entity = &EntityContainer.entities[entityId];
+    EcsArchetype* archetype = &ArchetypeContainer.archetypes[entity->archetypeId];
+    EcsArchetypeSignature* signature = &ArchetypeContainer.signatures[entity->archetypeId];
+
+    uint componentsId = entity->componentsId;
+    uintptr_t* pDstPtr = (uintptr_t*)dst->components;
+    uint* pSigComId = signature->componentIds;
+
+    for (uint i = 0; i != ECS_MAX_QUERY_COMPONENTS; ++i)
+    {
+        if (*pSigComId == 0xFFFFFFFF)
+            break;
+
+        EcsComponentArray* pComArray = &archetype->componentArrays[*pSigComId];
+        *pDstPtr = (uintptr_t)pComArray->components[pComArray->stride * componentsId];
+
+        ++pSigComId;
+        ++pDstPtr;
+    }
+}
+
+void ecsGetComponentsFromEntityIdEx(EcsComponentsResultEx* dst, uint entityId)
+{
+    const EcsEntity* entity = &EntityContainer.entities[entityId];
+    EcsArchetype* archetype = &ArchetypeContainer.archetypes[entity->archetypeId];
+    EcsArchetypeSignature* signature = &ArchetypeContainer.signatures[entity->archetypeId];
+
+    uint componentsId = entity->componentsId;
+    uintptr_t* pDstPtrComs = (uintptr_t*)dst->components;
+    uint* pDstPtrStrides = dst->strides;
+    uint* pSigComId = signature->componentIds;
+
+    for (uint i = 0; i != ECS_MAX_QUERY_COMPONENTS; ++i)
+    {
+        if (*pSigComId == 0xFFFFFFFF)
+            break;
+
+        EcsComponentArray* pComArray = &archetype->componentArrays[*pSigComId];
+        *pDstPtrComs = (uintptr_t)pComArray->components[pComArray->stride * componentsId];
+        *pDstPtrStrides = pComArray->stride;
+
+        ++pSigComId;
+        ++pDstPtrComs;
+        ++pDstPtrStrides;
+    }
+}
+
+inline EcsQuery* ecsGetQuery(uint queryId)
 {
     return &QueryContainer.queries[queryId];
 }
-
 
 // args are { id }
 void ecsCreateArchetypeSigniture(EcsArchetypeSignature* dst, uint componentCount, ...)
@@ -248,7 +361,7 @@ uint ecsCreateArchetype(uint componentCount, ...)
 {
     uint archId = ArchetypeContainer.archetypeCount;
     
-    // allocate capacity
+    // allocate archetype capacity
     if (ArchetypeContainer.archetypeCount == ArchetypeContainer.archetypeCapacity)
     {
         if (ArchetypeContainer.archetypeCount == 0)
@@ -264,36 +377,31 @@ uint ecsCreateArchetype(uint componentCount, ...)
             aligned_realloc(ArchetypeContainer.signatures, sizeof(EcsArchetypeSignature) * newCapacity, ECS_ALIGNMENT);
             ArchetypeContainer.archetypeCapacity = newCapacity;
         }
-
-        // allocate new component arrays
-        uint newCount = ArchetypeContainer.archetypeCapacity - ArchetypeContainer.archetypeCount;
-        for (uint i = 0; i != newCount; ++i)
-        {
-            EcsArchetype* arch = ArchetypeContainer.archetypes + ArchetypeContainer.archetypeCount + newCount;
-            va_list valist;
-            va_start(valist, componentCount);
-            for (uint i = 0; i != componentCount; ++i)
-            {
-                uint componentId = va_arg(valist, uint);
-                size_t componentSize = va_arg(valist, size_t);
-                EcsComponentArray* compArray = arch->componentArrays + componentId;
-                compArray->components = aligned_alloc(componentSize * ECS_DEFAULT_COMPONENT_COUNT, ECS_ALIGNMENT);
-                compArray->stride = componentSize;
-            }
-            va_end(valist);
-        }
-
     }
 
-    EcsArchetype* arch = ArchetypeContainer.archetypes + archId;
     ++ArchetypeContainer.archetypeCount;
+
+    EcsArchetype* arch = ArchetypeContainer.archetypes + archId;
+    assert(arch);
     memset(arch, 0, sizeof(EcsArchetype));
     
-    EcsArchetypeSignature* sig = ArchetypeContainer.signatures + archId;
+    // allocate components from params signature //TODO: convert to pass in signature ptr as param or one struct params
     va_list valist;
+    va_list valistcpy;
     va_start(valist, componentCount);
-    ecsCreateArchetypeSignitureAlt(sig, componentCount, valist);
+    va_copy(valistcpy, valist);
+    for (uint i = 0; i != componentCount; ++i)
+    {
+        uint componentId = va_arg(valist, uint);
+        size_t componentSize = va_arg(valist, size_t);
+        EcsComponentArray* compArray = arch->componentArrays + componentId;
+        compArray->components = (byte*)aligned_alloc(componentSize * ECS_DEFAULT_COMPONENT_COUNT, ECS_ALIGNMENT);
+        compArray->stride = componentSize;
+    }
     va_end(valist);
+
+    EcsArchetypeSignature* sig = ArchetypeContainer.signatures + archId;
+    ecsCreateArchetypeSignitureAlt(sig, componentCount, valistcpy);
 
     return archId;
 }
@@ -382,6 +490,7 @@ uint ecsCreateEntity(uint archetypeId)
     }
 
     EcsEntity* entity = EntityContainer.entities + entityId;
+    assert(entity);
     ++EntityContainer.entityCount;
 
     EcsArchetype* archetype = ArchetypeContainer.archetypes + archetypeId;
@@ -417,7 +526,7 @@ uint ecsCreateEntity(uint archetypeId)
 //typedef void (*ecsQueryCallback7)(uint entityId, void* component[7]);
 //typedef void (*ecsQueryCallback8)(uint entityId, void* component[8]);
 
-EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount)
+inline EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount)
 {
     EcsQuery* query = &QueryContainer.queries[queryId];
     EcsIterator out;
@@ -428,7 +537,7 @@ EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount)
 }
 
 
-EcsIterator* ecsIterateQuery(EcsIterator* itr, uint componentCount, ...)
+inline EcsIterator* ecsIterateQuery(EcsIterator* itr, uint componentCount, ...)
 {
     EcsArchetype* archetype = &ArchetypeContainer.archetypes[*itr->archIdItr];
     if (itr->archEntityIndex == archetype->entityCount)

@@ -87,14 +87,18 @@ typedef struct EcsComponentArray
     size_t stride;
 } EcsComponentArray;
 
+/// @brief the defining type of an entity - similar to class
+/// stores all component data and keeps track of entities assigned
+/// get signiture of component ids from 
 typedef struct EcsArchetype
 {
     uint* entityIds;
     uint entityCount;
     uint entityCapacity;
 
-    // sparse array for O(1) indexing by componentId
+    // sparse array for O(1) indexing by componentId - all component types are global/uniqueId
     // entity count/capacity used to maintain dynamic arrays in unison
+    // note: todo: inspect behavior of accessing invalid component
     struct EcsComponentArray componentArrays[ECS_MAX_COMPONENT_TYPES];
 } EcsArchetype;
 
@@ -119,21 +123,37 @@ typedef struct EcsIterator
     uint archEntityCount;
 } EcsIterator;
 
-extern inline EcsEntity* ecsGetEntity(uint entityId);
-extern inline EcsArchetype* ecsGetArchetype(uint archetypeId);
-extern inline EcsArchetype* ecsGetArchetypeFromEntity(const EcsEntity* entity);
-extern inline EcsArchetype* ecsGetArchetypeFromEntityId(uint entityId);
-extern inline void* ecsGetComponentFromArchetype(const EcsArchetype* archetype, uint componentTypeId, uint componentIndex);
-extern inline void* ecsGetComponentFromArchetypeId(uint archetypeId, uint componentTypeId, uint componentIndex);
-extern inline void* ecsGetComponentFromEntityId(uint entityId, uint componentTypeId);
-extern inline EcsQuery* ecsGetQuery(uint queryId);
+typedef struct EcsComponentsResult
+{
+    void* components[ECS_MAX_QUERY_COMPONENTS];
+} EcsComponentsResult;
+
+typedef struct EcsComponentsResultEx
+{
+    void* components[ECS_MAX_QUERY_COMPONENTS];
+    uint strides[ECS_MAX_QUERY_COMPONENTS];
+} EcsComponentsResultEx;
+
+
+EcsEntity* ecsGetEntity(uint entityId);
+EcsArchetype* ecsGetArchetype(uint archetypeId);
+EcsArchetype* ecsGetArchetypeFromEntity(const EcsEntity* entity);
+EcsArchetype* ecsGetArchetypeFromEntityId(uint entityId);
+void* ecsGetComponentFromArchetype(const EcsArchetype* archetype, uint componentTypeId, uint componentIndex);
+void* ecsGetComponentFromArchetypeId(uint archetypeId, uint componentTypeId, uint componentIndex);
+void* ecsGetComponentFromEntityId(uint entityId, uint componentTypeId);
+
+void ecsGetComponentsFromEntityId(EcsComponentsResult* dst, uint entityId);
+void ecsGetComponentsFromEntityIdEx(EcsComponentsResultEx* dst, uint entityId);
+
+EcsQuery* ecsGetQuery(uint queryId);
 
 /// @brief initialize iteration of a query.
 /// ex. EcsIterator itr = ecsIterateQueryInit((uint)eMyQuery, 2);
 /// @param queryId: created with ecsCreateQuery
 /// @param componentCount: number of components in query
 /// @return EcsIterator object for use with ecsIterateQuery
-extern inline EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount);
+EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount);
 
 /// @brief iterate all archetypes and components in query. 
 /// ex: while( ecsIterateQuery(&itr, 2, &ptrCompA, &ptrCompB) ) ptrCompA->x = ptrCompB->y;
@@ -141,31 +161,37 @@ extern inline EcsIterator ecsIterateQueryInit(uint queryId, uint componentCount)
 /// @param componentCount: number of components in query
 /// @param ...: address of component pointer args - &ptrCompA, &ptrCompB, ...
 /// @return 
-extern inline EcsIterator* ecsIterateQuery(EcsIterator* itr, uint componentCount, ...);
+EcsIterator* ecsIterateQuery(EcsIterator* itr, uint componentCount, ...);
 
 /// @brief creates a query for iterating components in all applicable archetypes
 /// @param componentCount: number of component args in query
 /// @param ...: componentId args
 /// @return queryId
-extern uint ecsCreateQuery(uint componentCount, ...);
+uint ecsCreateQuery(uint componentCount, ...);
 
 /// @brief create an archetype, a collection of components which entities are assigned to
 /// @param componentCount: number of component args
 /// @param ...: componentId, sizeofComponent, ...
 /// @return archetypeId
-extern uint ecsCreateArchetype(uint componentCount, ...);
+uint ecsCreateArchetype(uint componentCount, ...);
 
 /// @brief create an entity assigned to archetype
 /// @param archetypeId: (see ecsCreateArchetype)
 /// @return entityId
-extern uint ecsCreateEntity(uint archetypeId);
+uint ecsCreateEntity(uint archetypeId);
 
-extern uint ecsCreateEntities(uint archetypeId, uint count);
+/// @brief add a component to entity - if new signiture, results in allocating new archetype and moving data
+/// @param entityId
+/// @param componentId 
+/// @param sizeofComponent 
+void ecsAddComponentToEntity(uint entityId, uint componentId, size_t sizeofComponent);
 
-extern void ecsReserveArchetypeCapacity(uint newCapacity);
-extern void ecsReserveEntityCapacity(uint newCapacity);
-extern void ecsReserveArchetypeEntityCapacity(uint newCapacity);
-extern void ecsReserveQueryCapacity(uint newCapacity);
+
+uint ecsCreateEntities(uint archetypeId, uint count);
+void ecsReserveArchetypeCapacity(uint newCapacity);
+void ecsReserveEntityCapacity(uint newCapacity);
+void ecsReserveArchetypeEntityCapacity(uint newCapacity);
+void ecsReserveQueryCapacity(uint newCapacity);
 
 #ifdef __cplusplus
 }
