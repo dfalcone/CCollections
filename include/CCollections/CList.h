@@ -124,6 +124,7 @@ void clistRealloc(CList* list, uint32_t newCapacity)
     void* data = list->Data;
     list->Capacity = newCapacity;
     list->Data = (uint8_t*)_mm_malloc(clistSizeOfCapacity(list), CCOLLECTIONS_ALIGNMENT);
+    assert(list->Data);
     memcpy(list->Data, data, clistSizeOfItems(list));
     _mm_free(data);
 }
@@ -168,7 +169,7 @@ void* clistItemAt(CList* list, uint32_t index)
 {
     uint8_t* ptr = (uint8_t*)list->Data;
     uint32_t offset = list->Stride * index;
-    assert(ptr < clistEnd(list) && "CList out of bounds");
+    assert(ptr < (uint8_t*)clistEnd(list) && "CList out of bounds");
     return ptr + offset;
 }
 
@@ -208,7 +209,7 @@ void clistZeroRangeAt(CList* list, uint32_t itemsCount, uint32_t index)
 {
     uint8_t* dst = (uint8_t*)clistItemAt(list, index);
     size_t size = (size_t)list->Stride * itemsCount;
-    assert(dst + size < clistEnd(list) && "CList out of bounds");
+    assert(dst + size < (uint8_t*)clistEnd(list) && "CList out of bounds");
     memset(dst, 0, size);
 }
 

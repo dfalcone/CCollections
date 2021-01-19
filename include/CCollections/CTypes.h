@@ -10,7 +10,7 @@
 #ifndef CCOLLECTIONS_ALIGNMENT
 // default align to common cache line
 // redefine this manually for platforms that differ
-#define CCOLLECTIONS_ALIGNMENT 64
+#define CCOLLECTIONS_ALIGNMENT 4096
 #endif // !CCOLLECTIONS_ALIGNMENT
 
 #ifndef CCOLLECTIONS_IS_POW2
@@ -42,7 +42,7 @@ typedef struct CContainer
     //! size in bytes of each item
     uint32_t Stride;
     // the type of container this is - cast to CCOLLECTION_TYPE
-    uint16_t Type;
+    enum CCOLLECTION_TYPE Type;
 } CContainer;
 
 typedef struct CContainerEx

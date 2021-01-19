@@ -18,6 +18,26 @@
 #define ECS_MAX_QUERY_ARCHETYPES 503
 #endif // !ECS_MAX_QUERY_ARCHETYPES
 
+#ifndef ECS_DEFAULT_ENTITY_COUNT 
+#define ECS_DEFAULT_ENTITY_COUNT 0x10000
+#endif // !ECS_DEFAULT_ENTITY_COUNT 
+
+#ifndef ECS_DEFAULT_ARCHETYPE_COUNT
+#define ECS_DEFAULT_ARCHETYPE_COUNT 512
+#endif // !ECS_DEFAULT_ARCHETYPE_COUNT
+
+#ifndef ECS_DEFAULT_ARCHETYPE_ENTITY_CAPACITY
+#define ECS_DEFAULT_ARCHETYPE_ENTITY_CAPACITY 256
+#endif // !ECS_DEFAULT_ARCHETYPE_ENTITY_CAPACITY
+
+#ifndef ECS_DEFAULT_QUERY_COUNT
+#define ECS_DEFAULT_QUERY_COUNT 256
+#endif // !ECS_DEFAULT_QUERY_COUNT
+
+#ifndef ECS_ALIGNMENT 
+#define ECS_ALIGNMENT 4096
+#endif // !ECS_ALIGNMENT 
+
 
 /* Example Usage:
 
@@ -175,15 +195,6 @@ typedef struct EcsComponentsResultEx
     EcsComponentDescEx descs[ECS_MAX_COMPONENT_TYPES];
 } EcsComponentsResultEx;
 //int sizeofComponentsResultEx = sizeof(EcsComponentsResultEx); // default 4088
-
-typedef struct EcsCreateArchetypeInfo
-{
-    // optional - must be a power of 2 or 0 for default
-    uint entitiesInitialCapacity;
-    // must be less or equal to ECS_MAX_COMPONENT_TYPES
-    uint componentDescsCount;
-    EcsComponentDesc* componentDescs;
-} EcsCreateArchetypeInfo;
 
 typedef struct EcsInstance
 {

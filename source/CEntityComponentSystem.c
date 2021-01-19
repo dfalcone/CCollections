@@ -5,12 +5,6 @@
 #include <assert.h>
 #include <stdio.h>
 
-#define ECS_DEFAULT_ARCHETYPE_COUNT 512
-#define ECS_DEFAULT_ARCHETYPE_ENTITY_CAPACITY 256
-#define ECS_DEFAULT_QUERY_COUNT 256
-#define ECS_DEFAULT_ENTITY_COUNT 0x10000
-#define ECS_ALIGNMENT 4096
-
 // aligned_alloc
 #if defined(_MSC_VER)           // MSVC
     #define ecsAlloc(size,alignment) _aligned_malloc(size,alignment)
