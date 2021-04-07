@@ -1,3 +1,6 @@
+// MIT License - CCollections
+// Copyright(c) 2020 Dante Falcone (dantefalcone@gmail.com)
+
 #include "CCollections/CEntityComponentSystem.h"
 #include <malloc.h>
 #include <string.h>
@@ -54,6 +57,40 @@ inline void* ecsRealloc(void* ptr, size_t size, size_t align)
 }
 #endif // !ecsRealloc
 // !aligned_alloc
+
+static void ecsSwapEntity(EcsArchetype* archetype, EcsArchetypeSignature* signature, EcsEntity* entityA, EcsEntity* entityB)
+{
+    assert(entityA->archetypeId == entityB->archetypeId);
+    assert(archetype->entityCount < archetype->entityCapacity);
+
+    const uint comIdA = entityA->componentsId;
+    const uint comIdB = entityB->componentsId;
+
+    // swap entities
+    {
+        EcsEntity entityTemp = *entityA;
+        *entityA = *entityB;
+        *entityB = entityTemp;
+    }
+
+    // swap components
+    {
+        EcsComponentArray* componentGroup;
+        size_t comOffsetA, comOffsetB, comStride;
+        for (uint* comIdItr = signature->componentIds; *comIdItr != (uint)-1; ++comIdItr)
+        {
+            componentGroup = &archetype->componentArrays[*comIdItr];
+            comStride = componentGroup->stride;
+            assert(comStride <= ECS_MAX_COMPONENT_SIZE);
+            comOffsetA = comIdA * comStride;
+            comOffsetB = comIdB * comStride;
+            byte* comTemp = &componentGroup->components[archetype->entityCount]; // empty at end
+            memcpy(comTemp, &componentGroup->components[comOffsetA], comStride);
+            memcpy(&componentGroup->components[comOffsetA], &componentGroup->components[comIdB], comStride);
+            memcpy(&componentGroup->components[comOffsetB], comTemp, comStride);
+        }
+    }
+}
 
 inline void ecsSortComponentDescs(const uint count, EcsComponentDesc* descs)
 {
@@ -158,11 +195,6 @@ void ecsAddComponentToEntity(EcsInstance* instance, uint entityId, uint componen
 
 
         assert(componentCount <= ECS_MAX_QUERY_COMPONENTS);
-        //EcsCreateArchetypeInfo createInfo = { 0 };
-        //createInfo.entitiesInitialCapacity = arch->entityCapacity;
-        //createInfo.componentDescsCount = componentCount;
-        //createInfo.componentDescs = componentDescs;
-        //archId = ecsCreateArchetype(&createInfo);
         archId = ecsCreateArchetype(instance, componentCount, componentDescs, arch->entityCapacity);
     }
 
@@ -317,35 +349,6 @@ EcsQuery* ecsGetQuery(EcsInstance* instance, uint queryId)
     return &instance->QueryContainer.queries[queryId];
 }
 
-// args are { id, size }
-//void ecsCreateArchetypeSignitureAlt(EcsArchetypeSignature* dst, uint componentCount, ...)
-//{
-//    memset(dst, 0xFFFFFFFF, sizeof(EcsArchetypeSignature));
-//    va_list valist;
-//    va_start(valist, componentCount);
-//
-//    dst->componentIds[0] = va_arg(valist, uint);
-//    va_arg(valist, size_t); // skip size param
-//
-//    for (uint i = 1; i < componentCount; ++i)
-//    {
-//        uint componentId_a = dst->componentIds[i - 1];
-//        uint componentId_b = va_arg(valist, uint);
-//        va_arg(valist, size_t); // skip size param
-//
-//        if (componentId_a < componentId_b)
-//        {
-//            dst->componentIds[i] = componentId_b;
-//        }
-//        else
-//        {
-//            dst->componentIds[i - 1] = componentId_b;
-//            dst->componentIds[i] = componentId_a;
-//        }
-//    }
-//    va_end(valist);
-//}
-
 static void ecsCreateArchetypeSigniture(EcsInstance* instance, uint archetypeId, uint componentDescsCount, EcsComponentDesc* componentDescs)
 {
     ecsSortComponentDescs(componentDescsCount, componentDescs);
@@ -360,56 +363,6 @@ static void ecsCreateArchetypeSigniture(EcsInstance* instance, uint archetypeId,
         dst->componentIds[i] = componentDescs[i].id;
     }
 }
-
-//uint ecsCreateArchetype2(EcsCreateArchetypeInfo* info)
-//{
-//    uint archId = ArchetypeContainer.count;
-//
-//    // allocate archetype capacity
-//    if (ArchetypeContainer.count == 0)
-//    {
-//        ArchetypeContainer.capacity = ECS_DEFAULT_ARCHETYPE_COUNT;
-//        ArchetypeContainer.archetypes = (EcsArchetype*)ecsAlloc(sizeof(EcsArchetype) * ECS_DEFAULT_ARCHETYPE_COUNT, ECS_ALIGNMENT);
-//        ArchetypeContainer.signatures = (EcsArchetypeSignature*)ecsAlloc(sizeof(EcsArchetypeSignature) * ECS_DEFAULT_ARCHETYPE_COUNT, ECS_ALIGNMENT);
-//    }
-//    else if (ArchetypeContainer.count == ArchetypeContainer.capacity)
-//    {
-//        uint newCapacity = ArchetypeContainer.capacity * 2;
-//        ArchetypeContainer.archetypes = (EcsArchetype*)ecsRealloc(ArchetypeContainer.archetypes, sizeof(EcsArchetype) * newCapacity, ECS_ALIGNMENT);
-//        ArchetypeContainer.signatures = (EcsArchetypeSignature*)ecsRealloc(ArchetypeContainer.signatures, sizeof(EcsArchetypeSignature) * newCapacity, ECS_ALIGNMENT);
-//        ArchetypeContainer.capacity = newCapacity;
-//    }
-//    assert(ArchetypeContainer.count < ArchetypeContainer.capacity);
-//
-//    ++ArchetypeContainer.count;
-//
-//    EcsArchetype* arch = ArchetypeContainer.archetypes + archId;
-//    assert(arch);
-//    memset(arch, 0, sizeof(EcsArchetype));
-//    uint entitiesInitialCapacity = info->entitiesInitialCapacity ? info->entitiesInitialCapacity : ECS_DEFAULT_ARCHETYPE_ENTITY_CAPACITY;
-//    arch->entityCapacity = entitiesInitialCapacity;
-//
-//    // allocate components from params signature //TODO: convert to pass in signature ptr as param or one struct params
-//    assert(info->componentDescsCount <= ECS_MAX_COMPONENT_TYPES);
-//    EcsComponentDesc* comDescItr = info->componentDescs;
-//    EcsComponentDesc* comDescEnd = info->componentDescs + info->componentDescsCount;
-//    while (comDescItr != comDescEnd)
-//    {
-//        uint componentId = comDescItr->id;
-//        assert(componentId < ECS_MAX_COMPONENT_TYPES);
-//        size_t componentSize = (size_t)comDescItr->stride;
-//        EcsComponentArray* compArray = arch->componentArrays + componentId;
-//        // allocate a component for each entity
-//        compArray->components = (byte*)ecsAlloc(componentSize * entitiesInitialCapacity, ECS_ALIGNMENT);
-//        compArray->stride = componentSize;
-//
-//        ++comDescItr;
-//    }
-//
-//    ecsCreateArchetypeSigniture(archId, info->componentDescsCount, info->componentDescs);
-//    
-//    return archId;
-//}
 
 uint ecsCreateArchetype(EcsInstance* instance, uint componentCount, EcsComponentDesc* componentDescs, uint initialCapacity)
 {
@@ -577,15 +530,6 @@ uint ecsCreateEntity(EcsInstance* instance, uint archetypeId)
     return entityId;
 }
 
-//typedef void (*ecsQueryCallback1)(uint entityId, void* component);
-//typedef void (*ecsQueryCallback2)(uint entityId, void* component[2]);
-//typedef void (*ecsQueryCallback3)(uint entityId, void* component[3]);
-//typedef void (*ecsQueryCallback4)(uint entityId, void* component[4]);
-//typedef void (*ecsQueryCallback5)(uint entityId, void* component[5]);
-//typedef void (*ecsQueryCallback6)(uint entityId, void* component[6]);
-//typedef void (*ecsQueryCallback7)(uint entityId, void* component[7]);
-//typedef void (*ecsQueryCallback8)(uint entityId, void* component[8]);
-
 EcsQueryIterator ecsCreateQueryIterator(EcsInstance* instance, uint queryId)
 {
     EcsQuery* query = &instance->QueryContainer.queries[queryId];
@@ -595,7 +539,6 @@ EcsQueryIterator ecsCreateQueryIterator(EcsInstance* instance, uint queryId)
     out.archEntityIndex = -1;
     return out;
 }
-
 
 EcsQueryIterator* ecsIterateQuery(EcsQueryIterator* itr, void** componentsArray)
 {
@@ -737,130 +680,4 @@ void ecsDestroyEntity(EcsInstance* instance, uint entityId)
 
 
 
-// internal use - for sorting
-void ecsSwapEntity(EcsArchetype* archetype, EcsArchetypeSignature* signature, EcsEntity* entityA, EcsEntity* entityB)
-{
-    assert(entityA->archetypeId == entityB->archetypeId);
-    assert(archetype->entityCount < archetype->entityCapacity);
 
-    const uint comIdA = entityA->componentsId;
-    const uint comIdB = entityB->componentsId;
-
-    // swap entities
-    {
-        EcsEntity entityTemp = *entityA;
-        *entityA = *entityB;
-        *entityB = entityTemp;
-    }
-
-    // swap components
-    {
-        EcsComponentArray* componentGroup;
-        size_t comOffsetA, comOffsetB, comStride;
-        for (uint* comIdItr = signature->componentIds; *comIdItr != (uint)-1; ++comIdItr)
-        {
-            componentGroup = &archetype->componentArrays[*comIdItr];
-            comStride = componentGroup->stride;
-            assert(comStride <= ECS_MAX_COMPONENT_SIZE);
-            comOffsetA = comIdA * comStride;
-            comOffsetB = comIdB * comStride;
-            byte* comTemp = &componentGroup->components[archetype->entityCount]; // empty at end
-            memcpy(comTemp, &componentGroup->components[comOffsetA], comStride);
-            memcpy(&componentGroup->components[comOffsetA], &componentGroup->components[comIdB], comStride);
-            memcpy(&componentGroup->components[comOffsetB], comTemp, comStride);
-        }
-    }
-}
-
-
-
-
-//
-//size_t ecsComputeSignitureHashTableIndex(EcsArchetypeSignature* signiture)
-//{
-//    size_t hash;
-//
-//#if UINTPTR_MAX == 0xFFFFFFFF
-//    // 32 bit
-//
-//    const size_t fnv_offset_basis = 2166136261U;
-//    const size_t fnv_prime = 16777619U;
-//    hash = fnv_offset_basis;
-//
-//    #if ECS_MAX_COMPONENT_TYPES == 256
-//        // unrolled for default case speedup
-//        size_t mask0 = *(size_t*)signiture->componentMask;
-//        size_t mask1 = *(size_t*)signiture->componentMask + 1;
-//        size_t mask2 = *(size_t*)signiture->componentMask + 2;
-//        size_t mask3 = *(size_t*)signiture->componentMask + 3;
-//        size_t mask4 = *(size_t*)signiture->componentMask + 4;
-//        size_t mask5 = *(size_t*)signiture->componentMask + 5;
-//        size_t mask6 = *(size_t*)signiture->componentMask + 6;
-//        size_t mask7 = *(size_t*)signiture->componentMask + 7;
-//
-//        hash ^= mask0;
-//        hash *= fnv_prime;
-//        hash ^= mask1;
-//        hash *= fnv_prime;
-//        hash ^= mask2;
-//        hash *= fnv_prime;
-//        hash ^= mask3;
-//        hash *= fnv_prime;
-//        hash ^= mask4;
-//        hash *= fnv_prime;
-//        hash ^= mask5;
-//        hash *= fnv_prime;
-//        hash ^= mask6;
-//        hash *= fnv_prime;
-//        hash ^= mask7;
-//        hash *= fnv_prime;
-//
-//    #else
-//        // user defined max component types, consider implementing your own custom unrolled version here
-//        static_assert(ECS_MAX_COMPONENT_TYPES % 32 == 0, "ECS_MAX_COMPONENT_TYPES must be a multiple of 32");
-//        for (size_t i = 0; i != (ECS_MAX_COMPONENT_TYPES / 32); ++i)
-//        {
-//            size_t maski = *(size_t*)signiture->componentMask + i;
-//            hash ^= maski;
-//            hash *= fnv_prime;
-//        }
-//    #endif //ECS_MAX_COMPONENT_TYPES == 256
-//#else
-//    // 64 bit
-//    
-//    const size_t fnv_offset_basis = 14695981039346656037ULL;
-//    const size_t fnv_prime = 1099511628211ULL;
-//    hash = fnv_offset_basis;
-//
-//    #if ECS_MAX_COMPONENT_TYPES == 256
-//        // unrolled for default case speedup
-//        size_t mask0 = *(size_t*)signiture->componentMask;
-//        size_t mask1 = *(size_t*)signiture->componentMask + 1;
-//        size_t mask2 = *(size_t*)signiture->componentMask + 2;
-//        size_t mask3 = *(size_t*)signiture->componentMask + 3;
-//
-//        hash ^= mask0;
-//        hash *= fnv_prime;
-//        hash ^= mask1;
-//        hash *= fnv_prime;
-//        hash ^= mask2;
-//        hash *= fnv_prime;
-//        hash ^= mask3;
-//        hash *= fnv_prime;
-//
-//    #else
-//        // user defined max component types, consider implementing your own custom unrolled version here
-//        static_assert(ECS_MAX_COMPONENT_TYPES % 64 == 0, "ECS_MAX_COMPONENT_TYPES must be a multiple of 64");
-//        for (size_t i = 0; i != (ECS_MAX_COMPONENT_TYPES / 64); ++i)
-//        {
-//            size_t maski = *(size_t*)signiture->componentMask + i;
-//            hash ^= maski;
-//            hash *= fnv_prime;
-//        }
-//    #endif // ECS_MAX_COMPONENT_TYPES == 256
-//
-//#endif // UINTPTR_MAX == 0xFFFFFFFF
-//
-//    hash %= ECS_MAX_SIGNITURE_PERMUTATIONS;
-//    return hash;
-//}

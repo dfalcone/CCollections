@@ -1,3 +1,6 @@
+// MIT License - CCollections
+// Copyright(c) 2020 Dante Falcone (dantefalcone@gmail.com)
+
 #pragma once
 #include <stdint.h>
 
@@ -292,13 +295,13 @@ void ecsDestroyEntity(EcsInstance* instance, uint entityId);
 void ecsAddComponentToEntity(EcsInstance* instance, uint entityId, uint componentId, size_t sizeofComponent);
 
 
-// TODO -- below
-void ecsRemoveComponentFromEntity(EcsInstance* instance, uint entityId, uint componentId);
-uint ecsCreateEntities(uint archetypeId, uint count);
-void ecsReserveArchetypeCapacity(uint newCapacity);
-void ecsReserveEntityCapacity(uint newCapacity);
-void ecsReserveArchetypeEntityCapacity(uint newCapacity);
-void ecsReserveQueryCapacity(uint newCapacity);
+// TODO -- below -- nice to have quality of life functions
+// void ecsRemoveComponentFromEntity(EcsInstance* instance, uint entityId, uint componentId);
+// uint ecsCreateEntities(uint archetypeId, uint count);
+// void ecsReserveArchetypeCapacity(uint newCapacity);
+// void ecsReserveEntityCapacity(uint newCapacity);
+// void ecsReserveArchetypeEntityCapacity(uint newCapacity);
+// void ecsReserveQueryCapacity(uint newCapacity);
 
 #ifdef __cplusplus
 }
